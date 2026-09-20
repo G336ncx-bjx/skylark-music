@@ -63,7 +63,7 @@ public abstract class AppShell extends Activity {
     protected static final int REQ_STORAGE = 103;
 
     /** 与 AndroidManifest.xml 的 versionName 保持一致。 */
-    public static final String VERSION = "3.3.22";
+    public static final String VERSION = "3.3.23";
 
     /** 系统播放器（MediaPlayer）原生支持的格式：mp3 / m4a / aac / wav / wma / flac / ogg / opus。 */
     protected static final String[] AUDIO_EXT = { "mp3", "m4a", "aac", "wav", "wma", "flac", "ogg", "oga", "opus" };

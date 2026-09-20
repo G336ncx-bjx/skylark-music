@@ -209,6 +209,19 @@ namespace Skylark
         private const int WS_EX_TRANSPARENT_LOCAL = 0x00000020;
         private const int WS_EX_TOOLWINDOW_LOCAL = 0x00000080;
         private const int WS_EX_NOACTIVATE_LOCAL = 0x08000000;
+        private const int WS_EX_TOPMOST_LOCAL = 0x00000008;
+        private const int SW_MINIMIZE_LOCAL = 6;
+        private static readonly IntPtr HWND_NOTOPMOST_LOCAL = new IntPtr(-2);
+        private const uint SWP_NOMOVE_LOCAL = 0x0002;
+        private const uint SWP_NOSIZE_LOCAL = 0x0001;
+        private const uint SWP_NOACTIVATE_LOCAL = 0x0010;
+
+        [DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
+            int X, int Y, int cx, int cy, uint uFlags);
 
         /// <summary>窗口当前的缩放系数（150% 显示 = 1.5）。</summary>
         private static double ScaleOf(System.Windows.DependencyObject visual)
@@ -317,6 +330,26 @@ namespace Skylark
                 SetCursorPos(origin.X, origin.Y);
                 Pump(0.3);
 
+                // ---- 自愈测试：模拟 Win+D 把它最小化、以及别的程序抢走置顶 ----
+                main.SetLyricLocked(false, false);
+                Pump(0.3);
+                ShowWindow(handle, SW_MINIMIZE_LOCAL);
+                Pump(0.5);
+                bool minimized = IsIconic(handle);
+                Pump(4.5);
+                bool restored = !IsIconic(handle) && lyrics.WindowState == WindowState.Normal;
+                bool topmostBack = (GetWindowLong(handle, GWL_EXSTYLE_LOCAL) & WS_EX_TOPMOST_LOCAL) != 0;
+                Report(report, "模拟 Win+D 把它最小化        = " + minimized + "（期望 True）");
+                Report(report, "自愈后自己恢复显示           = " + restored + "（期望 True）");
+                Report(report, "自愈后置顶样式还在           = " + topmostBack + "（期望 True）");
+
+                SetWindowPos(handle, HWND_NOTOPMOST_LOCAL, 0, 0, 0, 0,
+                    SWP_NOMOVE_LOCAL | SWP_NOSIZE_LOCAL | SWP_NOACTIVATE_LOCAL);
+                Pump(3.2);
+                bool topmostRestored = (GetWindowLong(handle, GWL_EXSTYLE_LOCAL) & WS_EX_TOPMOST_LOCAL) != 0;
+                Report(report, "置顶被抢走后自动恢复         = " + topmostRestored + "（期望 True）");
+                Report(report, "自愈次数                     = " + lyrics.HealthFixes);
+
                 main.SetLyricLocked(original, false);
                 main.ShowDesktopLyrics(false);
 
@@ -342,7 +375,8 @@ namespace Skylark
 
                 bool ok = hitUnlocked && !hitLocked && !transparentBefore && transparent && noActivate
                     && toolWindow && unlockVisible && unlockClickable
-                    && (noCursorAccess || (shownWhenNear && hiddenWhenFar));
+                    && (noCursorAccess || (shownWhenNear && hiddenWhenFar))
+                    && minimized && restored && topmostBack && topmostRestored;
                 Report(report, ok ? "LOCKCHECK OK" : "LOCKCHECK FAILED");
                 return ok ? 0 : 1;
             }

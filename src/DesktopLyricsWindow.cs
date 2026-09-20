@@ -42,6 +42,12 @@ namespace Skylark
         private DispatcherTimer unlockHideTimer;
         private DispatcherTimer unlockSafetyTimer;
         private LyricsUnlockWindow unlockButton;
+        /** 自愈体检：防止 Win+D / 换显示器 / 别的程序抢置顶之后，歌词窗再也回不来。 */
+        private DispatcherTimer healthTimer;
+        private bool closing;
+        private DateTime minimizedAt = DateTime.MinValue;
+        /** 诊断用：一共自愈了多少次。 */
+        public int HealthFixes;
 
         public DesktopLyricsWindow(MainWindow owner)
         {
@@ -124,9 +130,12 @@ namespace Skylark
                 ApplySettings();
                 UpdateNow();
                 StartPolling();
+                StartHealthCheck();
             };
             Closed += delegate
             {
+                closing = true;
+                if (healthTimer != null) healthTimer.Stop();
                 if (pollTimer != null) pollTimer.Stop();
                 if (hintTimer != null) hintTimer.Stop();
                 if (unlockSafetyTimer != null) unlockSafetyTimer.Stop();
@@ -397,6 +406,111 @@ namespace Skylark
 
         #region 状态与鼠标穿透
 
+        private void StartHealthCheck()
+        {
+            if (healthTimer != null) return;
+            healthTimer = new DispatcherTimer();
+            healthTimer.Interval = TimeSpan.FromMilliseconds(1500);
+            healthTimer.Tick += delegate { HealthCheck(); };
+            healthTimer.Start();
+        }
+
+        /// <summary>
+        /// 体检 + 自愈。
+        /// 这个浮窗是「无边框 + 置顶 + 不在任务栏 + 工具窗口」，这几种情况下系统会把它弄丢：
+        ///   Win+D（显示桌面）会把它最小化，而任务栏没有它的按钮，用户没法还原；
+        ///   某些全屏程序 / 桌面整理软件会顶掉它的置顶样式，于是被盖住；
+        ///   拔掉外接显示器或改分辨率后，它可能整个留在屏幕外面。
+        /// 表现都是「用着用着歌词自己没了」。这里定期检查并拉回来。
+        /// </summary>
+        private void HealthCheck()
+        {
+            if (closing || !IsLoaded) return;
+            try
+            {
+                IntPtr handle = new WindowInteropHelper(this).Handle;
+                if (handle == IntPtr.Zero) return;
+
+                // 1) 被最小化：等一会儿再恢复，免得按 Win+D 想看桌面时立刻弹回来
+                if (WindowState == WindowState.Minimized)
+                {
+                    if (minimizedAt == DateTime.MinValue) minimizedAt = DateTime.Now;
+                    else if ((DateTime.Now - minimizedAt).TotalSeconds >= 1.5)
+                    {
+                        minimizedAt = DateTime.MinValue;
+                        WindowState = WindowState.Normal;
+                        ShowWindow(handle, SW_SHOWNOACTIVATE);
+                        ForceTopmost(handle);
+                        HealthFixes++;
+                        MainWindow.TraceStep("desktop lyrics: 从最小化状态恢复（Win+D 之类）");
+                    }
+                    return;
+                }
+                minimizedAt = DateTime.MinValue;
+
+                // 2) 被藏起来（不是关闭，是 Visibility 被改）
+                if (!IsVisible)
+                {
+                    Show();
+                    ShowWindow(handle, SW_SHOWNOACTIVATE);
+                    ForceTopmost(handle);
+                    HealthFixes++;
+                    MainWindow.TraceStep("desktop lyrics: 窗口不可见，已重新显示");
+                    return;
+                }
+
+                // 3) 置顶样式丢了：会被别的窗口盖住
+                int ex = GetWindowLong(handle, GWL_EXSTYLE);
+                if ((ex & WS_EX_TOPMOST) == 0)
+                {
+                    ForceTopmost(handle);
+                    HealthFixes++;
+                    MainWindow.TraceStep("desktop lyrics: 置顶丢失，已重新置顶");
+                }
+
+                // 4) 整个窗口在屏幕外（拔显示器 / 改分辨率）
+                if (IsOffScreen(handle))
+                {
+                    PullBackOnScreen();
+                    ForceTopmost(handle);
+                    HealthFixes++;
+                    MainWindow.TraceStep("desktop lyrics: 窗口跑到屏幕外，已拉回主屏");
+                }
+            }
+            catch (Exception)
+            {
+                // 体检失败不影响播放，下一次再试
+            }
+        }
+
+        private void ForceTopmost(IntPtr handle)
+        {
+            if (!Topmost) Topmost = true;
+            SetWindowPos(handle, HWND_TOPMOST, 0, 0, 0, 0,
+                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        }
+
+        private bool IsOffScreen(IntPtr handle)
+        {
+            RECT rect;
+            if (!GetWindowRect(handle, out rect)) return false;
+            foreach (System.Windows.Forms.Screen screen in System.Windows.Forms.Screen.AllScreens)
+            {
+                System.Drawing.Rectangle bounds = screen.Bounds;
+                bool overlaps = rect.Left < bounds.Right && rect.Right > bounds.Left
+                             && rect.Top < bounds.Bottom && rect.Bottom > bounds.Top;
+                if (overlaps) return false;
+            }
+            return true;
+        }
+
+        private void PullBackOnScreen()
+        {
+            Rect area = SystemParameters.WorkArea;
+            Left = area.Left + Math.Max(0, (area.Width - Width) / 2);
+            Top = Math.Max(area.Top + 40, area.Bottom - Height - 80);
+        }
+
         private void StartPolling()
         {
             if (pollTimer != null) return;
@@ -651,6 +765,9 @@ namespace Skylark
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const int WS_EX_TOOLWINDOW = 0x00000080;
         private const int WS_EX_NOACTIVATE = 0x08000000;
+        private const int WS_EX_TOPMOST = 0x00000008;
+        private const int SW_SHOWNOACTIVATE = 4;
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -684,11 +801,15 @@ namespace Skylark
         private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter,
             int X, int Y, int cx, int cy, uint uFlags);
 
+        [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
         private const uint SWP_NOSIZE = 0x0001;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOZORDER = 0x0004;
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_FRAMECHANGED = 0x0020;
+        private const uint SWP_SHOWWINDOW = 0x0040;
 
         private void SetClickThrough(bool through)
         {
