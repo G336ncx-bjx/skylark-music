@@ -11,8 +11,8 @@
 param(
     [switch]$SkipTest,
     [switch]$RequireKeyStore,
-    [int]$VersionCode = 30401,
-    [string]$VersionName = '3.4.1',
+    [int]$VersionCode = 30402,
+    [string]$VersionName = '3.4.2',
     [string]$KeyStore,
     [string]$KeyAlias = 'skylark',
     [string]$KeyPass

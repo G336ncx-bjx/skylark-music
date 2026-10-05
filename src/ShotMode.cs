@@ -127,9 +127,12 @@ namespace Skylark
             else if (view == "music-search")
             {
                 root = window.Content as FrameworkElement;
+                window.Width = width;
+                window.Height = height;
                 window.Settings.CloudToken = "";
                 window.Settings.CloudUrl = "https://cloud.tsinghua.edu.cn/d/demo/";
                 window.ShowMusicSearch();
+                window.PopulateMusicSearchForShot();
             }
             else if (view == "download")
             {

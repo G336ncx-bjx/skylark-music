@@ -10,6 +10,8 @@ scripts/make-icon.ps1        生成 Windows 图标（assets/app.ico）
 scripts/make-android-icon.ps1 生成安卓图标（圆角方形 + 自适应图标前景）
 scripts/icon-artwork.ps1     两个平台共用的图标绘制代码
 scripts/install.ps1          构建 + 创建桌面 / 开始菜单快捷方式
+scripts/publish-android-update.ps1 校验并发布安卓应用内更新包到独立云盘资料库
+scripts/PublishAndroidUpdate.cs   发布辅助程序（凭据通过标准输入传入）
 src/Program.cs               入口：单实例、自检 / 截图 / 冒烟 / 各种命令行工具
 src/MainWindow.cs            主窗口外壳：字段、播放控制、托盘、全局热键、设置持久化
 src/MainWindow.Ui.cs         主窗口界面构建（顶栏 / 侧栏 / 播放条 / 提示条）
@@ -68,6 +70,20 @@ powershell -ExecutionPolicy Bypass -File android\build.ps1
 - 类文件多起来会超过 cmd 的命令行长度上限，所以先打成 jar 再交给 d8。
 
 ## 签名与发布
+
+安卓应用内更新读取独立的 `apk` 云盘资料库。**Git push、GitHub Release 或本地构建都不会自动更新这个资料库**。
+新版构建完成后，还要运行更新仓库发布脚本：
+
+```powershell
+# 在当前进程的 SKYLARK_UPDATE_TOKEN 环境变量中配置 apk 资料库读写令牌（不放进源码）。
+powershell -ExecutionPolicy Bypass -File scripts/publish-android-update.ps1
+```
+
+脚本从源码读取应用使用的只读令牌，核对读写令牌属于同一资料库；检查 APK 包名、版本和当前发布包的签名；
+上传为 `Skylark-android-<版本>.apk`，再通过应用的只读更新源下载回来核对 SHA-256。
+凭据通过子进程标准输入传递，不进入命令行参数或文件；同名包不会覆盖，旧版安装包保留。
+脚本默认使用 `dist/Skylark-android.apk` 和 `dist/release/Skylark.exe`（不存在时使用 `dist/Skylark.exe`），
+也可用 `-Apk` 和 `-PlayerExe` 指定构建产物。
 
 Android 后续版本要能覆盖安装，必须用同一个密钥签名，所以密钥不进仓库：
 
