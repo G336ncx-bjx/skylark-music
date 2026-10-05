@@ -70,11 +70,29 @@ namespace Skylark
 
         private static void TestMusicImport()
         {
+            string[,] titles = new string[,] {
+                { "樱花草-《米可，GO！》电视剧主题曲_《星苹果乐园》电视剧插曲", "樱花草" },
+                { "如愿（电影《我和我的父辈》主题推广曲）", "如愿" },
+                { "孤勇者 - 动画《英雄联盟：双城之战》主题曲", "孤勇者" },
+                { "光的方向《长歌行》电视剧片头曲", "光的方向" },
+                { "歌曲 (Live) - 《剧名》片尾曲", "歌曲 (Live)" },
+                { "A-B - 《剧名》插曲", "A-B" },
+                { "My Song - Some Show 主题曲", "My Song" },
+                { "世界-某某剧主题曲", "世界" },
+                { "歌曲（伴奏）", "歌曲（伴奏）" },
+                { "歌曲 (Remix)", "歌曲 (Remix)" },
+                { "我的主题曲", "我的主题曲" },
+                { "主题曲", "主题曲" }
+            };
+            for (int i = 0; i < titles.GetLength(0); i++)
+                Check("入库歌名清理：" + titles[i, 0], MusicSource.CleanTitle(titles[i, 0]) == titles[i, 1], MusicSource.CleanTitle(titles[i, 0]));
             Dictionary<string, object> song = new Dictionary<string, object> { { "name", "歌/曲" }, { "artist", "甲&乙" },
                 { "minfo", new object[] { new Dictionary<string, object> { { "format", "flac" }, { "bitrate", 2000 } },
                     new Dictionary<string, object> { { "format", "mp3" }, { "bitrate", 320 } } } } };
             Check("在线入库：按极高音质选 MP3 320K", MusicSource.Text(MusicSource.Extreme(song), "bitrate") == "320", null);
             Check("在线入库：音频歌词共用安全文件名", MusicSource.FileName(song) == "歌_曲 - 甲&乙", null);
+            song["name"] = titles[0, 0]; song["artist"] = "Sweety";
+            Check("在线入库：使用纯歌名和歌手命名", MusicSource.FileName(song) == "樱花草 - Sweety", null);
             song["minfo"] = new object[] { new Dictionary<string, object> { { "format", "mp3" }, { "bitrate", 128 } } };
             bool rejected = false;
             try { MusicSource.Extreme(song); } catch (IOException) { rejected = true; }

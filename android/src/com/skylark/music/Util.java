@@ -26,6 +26,33 @@ public class Util {
         return name.length() > 50 ? name.substring(0, 50).replaceAll("[ .]+$", "") : name;
     }
 
+    public static String cleanMusicTitle(String title) {
+        String promo = "主题曲|主题歌|片头曲|片头歌|片尾曲|片尾歌|插曲|推广曲|宣传曲|印象曲|预告曲|原声带";
+        String media = "电视连续剧|电视剧|影视剧|网络剧|网剧|电影|影片|动画片|动画|动漫|纪录片|综艺|音乐剧|游戏|手游";
+        String text = (title == null ? "" : title).trim().replaceAll(
+            "\\([^()]*?(?:" + promo + ")[^()]*\\)|（[^（）]*?(?:" + promo + ")[^（）]*）|【[^【】]*?(?:" + promo + ")[^【】]*】|\\[[^\\[\\]]*?(?:" + promo + ")[^\\[\\]]*\\]", "").trim();
+        java.util.regex.Matcher marker = java.util.regex.Pattern.compile(promo).matcher(text);
+        if (!marker.find()) return text;
+        String prefix = text.substring(0, marker.start()); int start = -1;
+        java.util.regex.Matcher separator = java.util.regex.Pattern.compile("\\s+[-–—:：|/]\\s*|[-–—:：|/]\\s*(?=[《〈「『])").matcher(prefix);
+        while (separator.find()) start = separator.start();
+        if (start < 0) {
+            for (char c : new char[] { '《', '〈', '「', '『' }) start = Math.max(start, prefix.lastIndexOf(c));
+            if (start > 0) {
+                java.util.regex.Matcher description = java.util.regex.Pattern.compile("(?:" + media + ")\\s*$").matcher(prefix.substring(0, start));
+                if (description.find()) start = description.start();
+            } else {
+                start = -1;
+                java.util.regex.Matcher description = java.util.regex.Pattern.compile(media).matcher(prefix);
+                while (description.find()) if (description.start() > 0) start = description.start();
+                if (start < 0) for (char c : new char[] { '-', '–', '—', ':', '：', '|', '/' }) start = Math.max(start, prefix.lastIndexOf(c));
+                if (start < 0) start = Math.max(prefix.lastIndexOf(' '), prefix.lastIndexOf('\t'));
+            }
+        }
+        String cleaned = start > 0 ? text.substring(0, start).replaceAll("[ \\t–—:：|/·-]+$", "") : text;
+        return cleaned.length() > 0 ? cleaned : text;
+    }
+
     public static void validateMusicLyric(String text) throws IOException {
         if (text == null || !java.util.regex.Pattern.compile("\\[\\d{1,3}:\\d{2}(?:[.:]\\d+)?\\]").matcher(text).find())
             throw new IOException("网站没有返回有效的 LRC 歌词，未上传歌曲");

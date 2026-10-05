@@ -201,7 +201,7 @@ public final class MusicImportDialog {
             public void run() {
                 String message; File dir = null;
                 try {
-                    String name = Util.safeMusicName(song.optString("name")) + " - " + Util.safeMusicName(song.optString("artist"));
+                    String name = Util.safeMusicName(Util.cleanMusicTitle(song.optString("name"))) + " - " + Util.safeMusicName(song.optString("artist"));
                     byte[] hash = MessageDigest.getInstance("SHA-256").digest((endpoint + "\n" + target + "\n" + source + "\n" + song.optString("id")).getBytes("UTF-8"));
                     StringBuilder key = new StringBuilder(); for (byte b : hash) key.append(String.format(java.util.Locale.ROOT, "%02x", b & 255));
                     dir = new File(host.getFilesDir(), "music-import/" + key);

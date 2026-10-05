@@ -40,6 +40,21 @@ public class SelfTest {
     private static void testMusicImport() {
         java.io.File dir = null;
         try {
+            String[][] titles = new String[][] {
+                { "樱花草-《米可，GO！》电视剧主题曲_《星苹果乐园》电视剧插曲", "樱花草" },
+                { "如愿（电影《我和我的父辈》主题推广曲）", "如愿" },
+                { "孤勇者 - 动画《英雄联盟：双城之战》主题曲", "孤勇者" },
+                { "光的方向《长歌行》电视剧片头曲", "光的方向" },
+                { "歌曲 (Live) - 《剧名》片尾曲", "歌曲 (Live)" },
+                { "A-B - 《剧名》插曲", "A-B" },
+                { "My Song - Some Show 主题曲", "My Song" },
+                { "世界-某某剧主题曲", "世界" },
+                { "歌曲（伴奏）", "歌曲（伴奏）" },
+                { "歌曲 (Remix)", "歌曲 (Remix)" },
+                { "我的主题曲", "我的主题曲" },
+                { "主题曲", "主题曲" }
+            };
+            for (String[] pair : titles) check("入库歌名清理：" + pair[0], pair[1].equals(Util.cleanMusicTitle(pair[0])));
             check("在线入库：安全文件名", "歌_曲".equals(Util.safeMusicName("歌/曲")));
             boolean rejected = false;
             try { Util.validateMusicLyric("<html>验证页面</html>"); } catch (java.io.IOException e) { rejected = true; }

@@ -169,7 +169,43 @@ namespace Skylark
             return result.Length > 50 ? result.Substring(0, 50).TrimEnd(' ', '.') : result;
         }
         public static string FileName(Dictionary<string, object> song)
-        { return SafeName(Text(song, "name")) + " - " + SafeName(Text(song, "artist")); }
+        { return SafeName(CleanTitle(Text(song, "name"))) + " - " + SafeName(Text(song, "artist")); }
+
+        public static string CleanTitle(string title)
+        {
+            const string promo = "主题曲|主题歌|片头曲|片头歌|片尾曲|片尾歌|插曲|推广曲|宣传曲|印象曲|预告曲|原声带";
+            const string media = "电视连续剧|电视剧|影视剧|网络剧|网剧|电影|影片|动画片|动画|动漫|纪录片|综艺|音乐剧|游戏|手游";
+            string text = (title ?? "").Trim();
+            // 只移除含宣传说明的括号，Live、伴奏、Remix 等版本括号保留。
+            text = System.Text.RegularExpressions.Regex.Replace(text,
+                @"\([^()]*?(?:" + promo + @")[^()]*\)|（[^（）]*?(?:" + promo + @")[^（）]*）|【[^【】]*?(?:" + promo + @")[^【】]*】|\[[^\[\]]*?(?:" + promo + @")[^\[\]]*\]", "").Trim();
+            System.Text.RegularExpressions.Match marker = System.Text.RegularExpressions.Regex.Match(text, promo);
+            if (!marker.Success) return text;
+            string prefix = text.Substring(0, marker.Index);
+            int start = -1;
+            // 从最后一个说明分隔符截断，保留标题中更早的连字符和版本信息。
+            foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(prefix,
+                @"\s+[-–—:：|/]\s*|[-–—:：|/]\s*(?=[《〈「『])")) start = match.Index;
+            if (start < 0)
+            {
+                start = prefix.LastIndexOfAny(new char[] { '《', '〈', '「', '『' });
+                if (start > 0)
+                {
+                    System.Text.RegularExpressions.Match description = System.Text.RegularExpressions.Regex.Match(prefix.Substring(0, start), @"(?:" + media + @")\s*$");
+                    if (description.Success) start = description.Index;
+                }
+                else
+                {
+                    start = -1;
+                    foreach (System.Text.RegularExpressions.Match match in System.Text.RegularExpressions.Regex.Matches(prefix, media))
+                        if (match.Index > 0) start = match.Index;
+                    if (start < 0) start = prefix.LastIndexOfAny(new char[] { '-', '–', '—', ':', '：', '|', '/' });
+                    if (start < 0) start = prefix.LastIndexOfAny(new char[] { ' ', '\t' });
+                }
+            }
+            string cleaned = start > 0 ? text.Substring(0, start).TrimEnd(' ', '\t', '-', '–', '—', ':', '：', '|', '/', '·') : text;
+            return cleaned.Length > 0 ? cleaned : text;
+        }
 
         public static void ValidateMp3(string path)
         {
