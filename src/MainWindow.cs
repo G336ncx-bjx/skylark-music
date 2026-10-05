@@ -21,7 +21,7 @@ namespace Skylark
     public partial class MainWindow : Window
     {
         public const string AppName = "云雀";
-        public const string AppVersion = "3.3.23";
+        public const string AppVersion = "3.4.0";
 
         /// <summary>桌面歌词的预设颜色（浅色背景建议用后面的深色）。</summary>
         public static readonly string[] LyricColorPresets = new string[]
@@ -988,6 +988,7 @@ namespace Skylark
 
         private void OnClosed(object sender, EventArgs e)
         {
+            musicBrowser.Dispose();
             TraceStep("closed: stop timer");
             if (timer != null) timer.Stop();
             TraceStep("closed: engine");

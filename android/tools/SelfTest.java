@@ -2,6 +2,7 @@ package selftest;
 
 import com.skylark.music.Lrc;
 import com.skylark.music.Util;
+import com.skylark.music.MusicImportFiles;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
@@ -25,6 +26,7 @@ public class SelfTest {
             out = System.out;
         }
         testSongName();
+        testMusicImport();
         testDecode();
         testTime();
         testMp3Duration();
@@ -34,6 +36,51 @@ public class SelfTest {
     }
 
     // ---------- 用例 ----------
+
+    private static void testMusicImport() {
+        java.io.File dir = null;
+        try {
+            check("在线入库：安全文件名", "歌_曲".equals(Util.safeMusicName("歌/曲")));
+            boolean rejected = false;
+            try { Util.validateMusicLyric("<html>验证页面</html>"); } catch (java.io.IOException e) { rejected = true; }
+            check("在线入库：拒绝无效歌词", rejected);
+            Util.validateMusicLyric("[00:01.00]歌词");
+            byte[] frames = new byte[3000]; frames[0] = frames[1044] = (byte)255;
+            frames[1] = frames[1045] = (byte)251; frames[2] = frames[1046] = (byte)224;
+            Util.validateMusicHead(frames, frames.length);
+            rejected = false;
+            try { Util.validateMusicHead("<html>验证页面</html>".getBytes("UTF-8"), 20); } catch (java.io.IOException e) { rejected = true; }
+            check("在线入库：拒绝伪音频", rejected);
+            dir = java.nio.file.Files.createTempDirectory("skylark-import-test").toFile();
+            final java.io.File audio = new java.io.File(dir, "歌曲 - 歌手.mp3"), lyric = new java.io.File(dir, "歌曲 - 歌手.lrc");
+            java.nio.file.Files.write(audio.toPath(), frames); java.nio.file.Files.write(lyric.toPath(), "[00:01]歌词".getBytes("UTF-8"));
+            final java.util.Map<String, Long> cloud = new java.util.HashMap<String, Long>();
+            final int[] uploads = new int[1]; final boolean[] fail = new boolean[1]; final boolean[] mismatch = new boolean[1];
+            MusicImportFiles.Destination destination = new MusicImportFiles.Destination() {
+                public Long size(String name) { return cloud.get(name); }
+                public void upload(java.io.File file) throws java.io.IOException {
+                    if (fail[0] && file.equals(lyric)) throw new java.io.IOException("模拟中断");
+                    uploads[0]++; cloud.put(file.getName(), Long.valueOf(file.length() - (mismatch[0] ? 1 : 0)));
+                }
+            };
+            java.io.File[] files = new java.io.File[] { audio, lyric };
+            cloud.put(lyric.getName(), Long.valueOf(5)); rejected = false;
+            try { MusicImportFiles.uploadPair(files, destination); } catch (java.io.IOException e) { rejected = true; }
+            check("在线入库：歌词撞名时不上传任何文件", rejected && uploads[0] == 0 && audio.exists() && lyric.exists());
+            cloud.clear(); fail[0] = true; rejected = false;
+            try { MusicImportFiles.uploadPair(files, destination); } catch (java.io.IOException e) { rejected = true; }
+            check("在线入库：上传失败保留文件和记录", rejected && audio.exists() && lyric.exists() && new java.io.File(audio + ".uploaded").exists());
+            fail[0] = false; MusicImportFiles.uploadPair(files, destination);
+            check("在线入库：重试跳过已上传音频", uploads[0] == 2 && cloud.size() == 2);
+            check("在线入库：核对两份云端文件后删除本地", !audio.exists() && !lyric.exists() && dir.list().length == 0);
+            cloud.clear(); mismatch[0] = true;
+            java.nio.file.Files.write(audio.toPath(), frames); java.nio.file.Files.write(lyric.toPath(), "[00:01]歌词".getBytes("UTF-8"));
+            rejected = false;
+            try { MusicImportFiles.uploadPair(files, destination); } catch (java.io.IOException e) { rejected = true; }
+            check("在线入库：云端大小不一致时保留本地", rejected && audio.exists() && lyric.exists());
+        } catch (Exception e) { check("在线入库自检异常：" + e, false); }
+        finally { if (dir != null) { for (java.io.File file : dir.listFiles()) file.delete(); dir.delete(); } }
+    }
 
     private static void testSongName() {
         check("歌名解析：标准格式", equal(Util.parseSongName("稻香 - 周杰伦"), "稻香", "周杰伦"));

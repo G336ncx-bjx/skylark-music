@@ -124,6 +124,11 @@ public abstract class SettingsScreen extends PlayerScreen {
                 playAll();
             }
         }));
+        libHeadRow.addView(button("找歌", false, new View.OnClickListener() {
+            public void onClick(View v) {
+                new MusicImportDialog(SettingsScreen.this).show();
+            }
+        }));
         libHeadRow.addView(button("上传", true, new View.OnClickListener() {
             public void onClick(View v) {
                 pickFiles();

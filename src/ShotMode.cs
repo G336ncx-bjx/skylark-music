@@ -124,6 +124,13 @@ namespace Skylark
                 window.LibraryViewRef.ExitBatch();
                 Console.WriteLine("batch-exit: 退出批量编辑没有抛异常");
             }
+            else if (view == "music-search")
+            {
+                root = window.Content as FrameworkElement;
+                window.Settings.CloudToken = "";
+                window.Settings.CloudUrl = "https://cloud.tsinghua.edu.cn/d/demo/";
+                window.ShowMusicSearch();
+            }
             else if (view == "download")
             {
                 root = window.Content as FrameworkElement;

@@ -57,7 +57,8 @@ namespace Skylark
             batchButton = IconTextButton("check", "批量编辑", "OutlineButton",
                 delegate { SetBatchMode(!batchMode); });
             batchButton.ToolTip = "批量编辑：点一行勾一首，然后批量下载 / 加入歌单 / 删除";
-            normalActions = Ui.Row(8, batchButton, upload, playAll);
+            Button findMusic = IconTextButton("plus", "在线找歌", "OutlineButton", delegate { main.ShowMusicSearch(); });
+            normalActions = Ui.Row(8, batchButton, findMusic, upload, playAll);
             normalActions.VerticalAlignment = VerticalAlignment.Center;
 
             // 批量编辑模式下，标题右边换成批量操作

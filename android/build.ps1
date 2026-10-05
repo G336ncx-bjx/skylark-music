@@ -11,8 +11,8 @@
 param(
     [switch]$SkipTest,
     [switch]$RequireKeyStore,
-    [int]$VersionCode = 30323,
-    [string]$VersionName = '3.3.23',
+    [int]$VersionCode = 30400,
+    [string]$VersionName = '3.4.0',
     [string]$KeyStore,
     [string]$KeyAlias = 'skylark',
     [string]$KeyPass
@@ -164,6 +164,7 @@ if (-not $SkipTest) {
     & $javacExe -encoding UTF-8 -nowarn -d $testOut `
         (Join-Path $src 'com\skylark\music\Util.java') `
         (Join-Path $src 'com\skylark\music\Lrc.java') `
+        (Join-Path $src 'com\skylark\music\MusicImportFiles.java') `
         (Join-Path $tools 'SelfTest.java')
     if ($LASTEXITCODE -ne 0) { throw '自检代码编译失败' }
     & $javaExe -cp $testOut selftest.SelfTest

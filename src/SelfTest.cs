@@ -19,6 +19,7 @@ namespace Skylark
             try
             {
                 TestSongName();
+                TestMusicImport();
                 TestLrc();
                 TestEncoding();
                 TestSettingsRoundTrip();
@@ -65,6 +66,67 @@ namespace Skylark
 
             TextUtil.ParseSongName("只有歌名", out title, out artist, out album);
             Check("文件名解析：无歌手", title == "只有歌名" && artist.Length == 0, title + " / 空歌手");
+        }
+
+        private static void TestMusicImport()
+        {
+            Dictionary<string, object> song = new Dictionary<string, object> { { "name", "歌/曲" }, { "artist", "甲&乙" },
+                { "minfo", new object[] { new Dictionary<string, object> { { "format", "flac" }, { "bitrate", 2000 } },
+                    new Dictionary<string, object> { { "format", "mp3" }, { "bitrate", 320 } } } } };
+            Check("在线入库：按极高音质选 MP3 320K", MusicSource.Text(MusicSource.Extreme(song), "bitrate") == "320", null);
+            Check("在线入库：音频歌词共用安全文件名", MusicSource.FileName(song) == "歌_曲 - 甲&乙", null);
+            song["minfo"] = new object[] { new Dictionary<string, object> { { "format", "mp3" }, { "bitrate", 128 } } };
+            bool rejected = false;
+            try { MusicSource.Extreme(song); } catch (IOException) { rejected = true; }
+            Check("在线入库：不降级为普通音质", rejected, null);
+            rejected = false;
+            try { MusicSource.ValidateLyric("<html>验证页面</html>"); } catch (IOException) { rejected = true; }
+            Check("在线入库：拒绝空歌词和网页", rejected, null);
+            MusicSource.ValidateLyric("[00:01.00]一句歌词");
+            string dir = Path.Combine(AppPaths.DataDir, "import-test-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            string audio = Path.Combine(dir, "歌曲 - 歌手.mp3"), lyric = Path.Combine(dir, "歌曲 - 歌手.lrc");
+            byte[] frames = new byte[3000];
+            frames[0] = frames[1044] = 255; frames[1] = frames[1045] = 251; frames[2] = frames[1046] = 224;
+            File.WriteAllBytes(audio, frames); MusicSource.ValidateMp3(audio);
+            File.WriteAllText(lyric, "[00:01.00]歌词", new UTF8Encoding(false));
+            Dictionary<string, long> cloud = new Dictionary<string, long>();
+            Func<string, long?> size = delegate(string name) { return cloud.ContainsKey(name) ? cloud[name] : (long?)null; };
+            int uploads = 0;
+            Action<string> upload = delegate(string file) { uploads++; cloud[Path.GetFileName(file)] = new FileInfo(file).Length; };
+            Action<string> report = delegate { };
+            try
+            {
+                cloud[Path.GetFileName(lyric)] = 5;
+                rejected = false;
+                try { MusicSource.UploadPair(new string[] { audio, lyric }, size, upload, report); } catch (IOException) { rejected = true; }
+                Check("在线入库：歌词撞名时不上传任何文件", rejected && uploads == 0 && File.Exists(audio) && File.Exists(lyric), null);
+                cloud.Clear();
+                rejected = false;
+                try
+                {
+                    MusicSource.UploadPair(new string[] { audio, lyric }, size, delegate(string file)
+                    { if (file == lyric) throw new IOException("模拟上传中断"); upload(file); }, report);
+                }
+                catch (IOException) { rejected = true; }
+                Check("在线入库：失败保留两份本地文件和上传记录", rejected && File.Exists(audio) && File.Exists(lyric) && File.Exists(audio + ".uploaded"), null);
+                MusicSource.UploadPair(new string[] { audio, lyric }, size, upload, report);
+                Check("在线入库：重试跳过已上传音频", uploads == 2 && cloud.Count == 2, null);
+                Check("在线入库：确认云端两份文件后清理本地", !File.Exists(audio) && !File.Exists(lyric) && Directory.GetFiles(dir).Length == 0, null);
+                cloud.Clear(); File.WriteAllBytes(audio, frames); File.WriteAllText(lyric, "[00:01]歌词");
+                rejected = false;
+                try
+                {
+                    MusicSource.UploadPair(new string[] { audio, lyric }, size, delegate(string file)
+                    { cloud[Path.GetFileName(file)] = new FileInfo(file).Length - 1; }, report);
+                }
+                catch (IOException) { rejected = true; }
+                Check("在线入库：云端大小不一致时禁止删除本地", rejected && File.Exists(audio) && File.Exists(lyric), null);
+                File.WriteAllText(audio, "<html>验证页面</html>"); rejected = false;
+                try { MusicSource.ValidateMp3(audio); } catch (IOException) { rejected = true; }
+                Check("在线入库：拒绝伪装成音频的验证页", rejected, null);
+            }
+            finally { Directory.Delete(dir, true); }
         }
 
         private static void TestLrc()

@@ -20,6 +20,30 @@ public class Util {
 
     // ---------- 文本 ----------
 
+    public static String safeMusicName(String text) throws IOException {
+        String name = text.trim().replaceAll("[\\x00-\\x1f<>:\"/\\\\|?*]", "_").replaceAll("[ .]+$", "");
+        if (name.length() == 0) throw new IOException("歌名或歌手为空，无法按规则命名");
+        return name.length() > 50 ? name.substring(0, 50).replaceAll("[ .]+$", "") : name;
+    }
+
+    public static void validateMusicLyric(String text) throws IOException {
+        if (text == null || !java.util.regex.Pattern.compile("\\[\\d{1,3}:\\d{2}(?:[.:]\\d+)?\\]").matcher(text).find())
+            throw new IOException("网站没有返回有效的 LRC 歌词，未上传歌曲");
+    }
+
+    public static void validateMusicHead(byte[] head, int length) throws IOException {
+        for (int i = 0; i + 4 < length; i++) {
+            if ((head[i] & 255) == 255 && (head[i + 1] & 254) == 250 && ((head[i + 2] & 255) >> 4) == 14
+                    && (head[i + 2] & 12) != 12) {
+                int rate = new int[] { 44100, 48000, 32000 }[((head[i + 2] & 255) >> 2) & 3];
+                int next = i + 144000 * 320 / rate + ((head[i + 2] >> 1) & 1);
+                if (next + 4 < length && (head[next] & 255) == 255 && (head[next + 1] & 254) == 250
+                    && ((head[next + 2] & 255) >> 4) == 14) return;
+            }
+        }
+        throw new IOException("下载内容不是 MP3 320K 音频，请重新获取地址");
+    }
+
     /** "歌名 - 歌手" 拆成标题与歌手（歌手里再出现分隔符时保留原样）。 */
     public static String[] parseSongName(String nameNoExt) {
         String title = nameNoExt == null ? "" : nameNoExt.trim();
@@ -150,6 +174,7 @@ public class Util {
                 out.close();
                 in.close();
             }
+            if (total >= 0 && done != total) throw new IOException("文件下载不完整");
             if (target.exists()) target.delete();
             if (!temp.renameTo(target)) throw new IOException("无法写入缓存文件");
         } finally {

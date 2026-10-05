@@ -254,6 +254,21 @@ public class Cloud {
         }
     }
 
+    /** 在线入库专用：只新增，绝不删除或覆盖原文件。 */
+    public static void uploadNew(String endpoint, File file, String dir, Util.Progress p) throws IOException {
+        String target = normDir(dir) + ("/".equals(normDir(dir)) ? "" : "/") + file.getName();
+        for (Entry entry : listAll(endpoint))
+            if (entry.path.equalsIgnoreCase(target)) throw new IOException("云盘已出现同名文件，请检查歌单后重试");
+        String result = Util.upload(uploadLink(endpoint, dir) + "?ret-json=1", dir, file, p);
+        if (result.contains("\"error\"")) throw new IOException("云盘上传失败");
+        try {
+            JSONArray reply = new JSONArray(result);
+            if (reply.length() > 0 && reply.optJSONObject(0) != null
+                && !file.getName().equals(reply.getJSONObject(0).optString("name", file.getName())))
+                throw new IOException("服务器改了上传文件名，请检查云端副本后重试");
+        } catch (org.json.JSONException ignored) { /* 不同 Seafile 版本返回格式不同，随后核对文件名和大小 */ }
+    }
+
     /** 云端指定目录里是否已有同名文件，有就返回它的完整路径。 */
     private static String findSameName(String endpoint, String dir, String name) {
         try {
@@ -342,6 +357,11 @@ public class Cloud {
     /** 云盘上某个目录存不存在。 */
     public static boolean dirExists(String endpoint, String dirPath) {
         try {
+            if (!isToken(endpoint)) {
+                String url = host(endpoint) + "/api/v2.1/share-links/" + token(endpoint)
+                    + "/dirents/?path=%2F" + encodePath(normDir(dirPath));
+                return parse(Util.getString(url, null)).has("dirent_list");
+            }
             String url = host(endpoint) + "/api/v2.1/via-repo-token/dir/?path="
                     + enc(normDir(dirPath)) + "&recursive=0";
             parse(Util.getString(url, auth(endpoint)));

@@ -460,10 +460,32 @@ namespace Skylark
             return true;
         }
 
+        /// <summary>在线入库专用：只新增，绝不删除或覆盖原文件。</summary>
+        public static void UploadNew(string endpoint, string path, string dir, Action<long, long> progress)
+        {
+            foreach (CloudEntry entry in List(endpoint, dir))
+                if (string.Equals(entry.Name, Path.GetFileName(path), StringComparison.OrdinalIgnoreCase))
+                    throw new IOException("云盘已出现同名文件，请检查目标歌单后重试");
+            string result;
+            if (!TryUpload(GetUploadUrl(endpoint, dir), path, dir, progress, true, out result))
+                throw new IOException(Shorten(result));
+            if (!NameMatches(result, path)) throw new IOException("服务器改了上传文件名，请检查云端副本后重试");
+        }
+
         /// <summary>上传接口的返回里带着服务器实际保存的文件名。</summary>
         private static string UploadedName(string body)
         {
             if (string.IsNullOrEmpty(body)) return null;
+            // 服务端可能转义中文、引号或反斜杠，文件名必须按 JSON 解码再比较。
+            try
+            {
+                object parsed = new System.Web.Script.Serialization.JavaScriptSerializer().DeserializeObject(body);
+                object[] items = parsed as object[];
+                Dictionary<string, object> record = (items != null && items.Length > 0 ? items[0] : parsed) as Dictionary<string, object>;
+                object name;
+                if (record != null && record.TryGetValue("name", out name)) return Convert.ToString(name);
+            }
+            catch (Exception) { }
             int at = body.IndexOf("\"name\"", StringComparison.OrdinalIgnoreCase);
             if (at < 0) return null;
             int colon = body.IndexOf(':', at);
@@ -508,6 +530,12 @@ namespace Skylark
 
         private static bool TryUpload(string uploadLink, string localFilePath, string dirPath,
             Action<long, long> progress, out string error)
+        {
+            return TryUpload(uploadLink, localFilePath, dirPath, progress, false, out error);
+        }
+
+        private static bool TryUpload(string uploadLink, string localFilePath, string dirPath,
+            Action<long, long> progress, bool captureResponse, out string error)
         {
             error = null;
             string url = uploadLink + "?ret-json=1";
@@ -564,6 +592,7 @@ namespace Skylark
                                 error = body;
                                 return false;
                             }
+                            if (captureResponse) error = body;
                             return true;
                         }
                     }
@@ -853,7 +882,7 @@ namespace Skylark
         {
             try
             {
-                List<CloudEntry> list = ListByToken(endpoint.Trim(), dirPath, false);
+                List<CloudEntry> list = List(endpoint.Trim(), dirPath);
                 return list != null;
             }
             catch (Exception)
